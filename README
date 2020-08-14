@@ -1,0 +1,6 @@
+git remote add origin git@github.com:fairinternal/heiner.git
+git push --set-upstream origin master:skel
+
+To run w/ debug:
+
+python setup.py build --debug install
