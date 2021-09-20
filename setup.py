@@ -19,7 +19,7 @@ class CMakeBuild(build_ext.build_ext):
         source_path = pathlib.Path(__file__).parent.resolve()
         output_path = (
             pathlib.Path(self.get_ext_fullpath(ext.name))
-            .parent.joinpath("skel")
+            .parent.joinpath("gilc")
             .resolve()
         )
         os.makedirs(self.build_temp, exist_ok=True)
