@@ -26,3 +26,5 @@ case a with gilc_nogil
 case b with gilc_nogil
    281212.77 +- 233375.12
 ```
+
+![Plot](plot.svg)
