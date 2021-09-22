@@ -18,27 +18,26 @@ def loop(upto, call):
     return speeds
 
 
-def a(method="gilc"):
+def a(new_object=gilc.Gilc, method="gilc", label=""):
     """Case a): single threaded:
     for _ in range(10000000):
       test_abc()"""
 
-    print("case a with", method)
-    g = gilc.Gilc()
+    g = new_object()
     speeds = loop(int(1e6), call=getattr(g, method))
-    print("% 12.2f +- %.2f" % (np.mean(speeds), np.std(speeds)))
+
+    return np.mean(speeds), np.std(speeds)
 
 
-def b(method="gilc_nogil"):
+def b(new_object=gilc.Gilc, method="gilc_nogil", label=""):
     """Case b): multi threaded, two threads, each doing a)."""
-    print("case b with", method)
     import queue
     import threading
 
     q = queue.Queue()
 
     def target():
-        g = gilc.Gilc()
+        g = new_object()
         q.put(loop(int(1e6), call=getattr(g, method)))
 
     threads = []
@@ -52,13 +51,54 @@ def b(method="gilc_nogil"):
     speeds = []
     while not q.empty():
         speeds += q.get()
-    print("% 12.2f +- %.2f" % (np.mean(speeds), np.std(speeds)))
+
+    return np.mean(speeds), np.std(speeds)
 
 
 def main():
+    print(
+        "\t".join(5 * ["%s"])
+        % (
+            "method",
+            "single thread",
+            "single thread std",
+            "two threads",
+            "two threads std",
+        )
+    )
+
+    def label(s):
+        if s.endswith("_nogil"):
+            return "GIL dropped"
+        return "GIL"
+
     for method in ("gilc", "gilc_nogil"):
-        a(method)
-        b(method)
+        a_mean, a_std = a(
+            gilc.Gilc, method, label="pybind11: single thread w/ %s" % label(method)
+        )
+        b_mean, b_std = b(
+            gilc.Gilc, method, label="pybind11: two threads w/ %s" % label(method)
+        )
+        print(
+            "\t".join(["%s"] + 4 * ["%s"])
+            % ("pybind w/ %s" % method, a_mean, a_std, b_mean, b_std)
+        )
+
+    for method in ("call", "call_nogil"):
+        a_mean, a_std = a(
+            gilc.mycmodule.MyCObject,
+            method,
+            label="C API: single thread w/ %s" % label(method),
+        )
+        b_mean, b_std = b(
+            gilc.mycmodule.MyCObject,
+            method,
+            label="C API: two threads w/ %s" % label(method),
+        )
+        print(
+            "\t".join(["%s"] + 4 * ["%s"])
+            % ("C API w/ %s" % method, a_mean, a_std, b_mean, b_std)
+        )
 
 
 if __name__ == "__main__":
