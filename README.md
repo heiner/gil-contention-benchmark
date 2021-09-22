@@ -14,14 +14,14 @@ python setup.py develop
 python main.py | tee data.dat
 ```
 
-Results on MacBook:
+Results on MacBook (in 1000 calls/sec):
 
 ```
-method	single thread	single thread std	two threads	two threads std
-pybind w/ gilc	3631826.1535959174	263096.4624542195	3561167.3317479948	791521.1382301509
-pybind w/ gilc_nogil	3080329.7107364074	277441.6010673747	302585.88223813544	325705.6648542893
-C API w/ call	29172772.918535203	1921468.032008213	27351489.45980912	5685750.208039337
-C API w/ call_nogil	10990427.92607121	831886.3989174861	1602937.4870584928	1351681.7832822218
+method					single thread	single thread std	two threads	two threads std
+pybind w/ GIL held		 3609.62		 300.60				3522.75		761.29
+pybind w/ GIL dropped	 2936.43		 218.11				 297.10		296.08
+C API w/ GIL held		28183.92		2679.00			   27485.77	   2676.13
+C API w/ GIL dropped	10326.72		 667.02			    1819.31	   1972.39
 ```
 
 ![Plot](plot.svg)

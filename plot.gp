@@ -12,10 +12,18 @@ set key autotitle columnheader noenhanced
 set boxwidth 0.25
 
 set yrange [0:*]
+# set logscale y
+set format y "%.0fK"
+
+set bmargin 3
+
+set title "calls/sec (in K)"
 
 plot 'data.dat' using ($0-0.25):2:xtic(1) with boxes ls 1, \
-  '' using ($0-0.25):2:3 with yerrorbars lc rgb 'black' lw 2, \
+  '' using ($0-0.25):0:2 with labels offset -1,-2.0 title "", \
+  '' using ($0-0.25):2:3 with yerrorbars lc rgb 'black' lw 2 title "", \
   '' using 0:4 with boxes ls 1 lc rgb 'blue', \
-  '' using 0:4:5 with yerrorbars lc rgb 'black' lw 2
+  '' using 0:0:4 with labels offset 1,-2.0 title "", \
+  '' using 0:4:5 with yerrorbars lc rgb 'black' lw 2 title ""
 
 pause(-1)
