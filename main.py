@@ -1,6 +1,6 @@
 import numpy as np
 
-from gilc import gilc
+import gilc
 
 
 def loop(upto, call):

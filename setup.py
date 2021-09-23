@@ -17,13 +17,11 @@ class CMakeBuild(build_ext.build_ext):
 
     def build_extension(self, ext):
         source_path = pathlib.Path(__file__).parent.resolve()
-        output_path = (
-            pathlib.Path(self.get_ext_fullpath(ext.name))
-            .parent.joinpath("gilc")
-            .resolve()
-        )
+        output_path = pathlib.Path(self.get_ext_fullpath(ext.name)).parent.absolute()
+
         os.makedirs(self.build_temp, exist_ok=True)
-        build_type = "Debug" if self.debug else "Release"
+
+        build_type = "Debug" if self.debug else "RelWithDebInfo"
 
         generator = "Ninja" if spawn.find_executable("ninja") else "Unix Makefiles"
 
@@ -38,8 +36,7 @@ class CMakeBuild(build_ext.build_ext):
             "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=%s" % output_path,
         ]
 
-        build_cmd = ["cmake", "--build", "."]
-        install_cmd = build_cmd + ["--target", "install"]
+        build_cmd = ["cmake", "--build", ".", "--parallel"]
 
         try:
             subprocess.check_call(cmake_cmd, cwd=self.build_temp)
@@ -51,9 +48,9 @@ class CMakeBuild(build_ext.build_ext):
 
 if __name__ == "__main__":
     setuptools.setup(
-        name="skel",
-        version="0.0.1",
-        ext_modules=[setuptools.Extension("skel", sources=[])],
+        name="gilc",
+        version="0.0.2",
+        ext_modules=[setuptools.Extension("gilc", sources=[])],
         cmdclass={"build_ext": CMakeBuild},
         setup_requires=["pybind11>=2.2"],
         install_requires=["pybind11>=2.2"],
