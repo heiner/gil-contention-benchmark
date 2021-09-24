@@ -1,25 +1,53 @@
 
+#include <cmath>
 #include <pybind11/pybind11.h>
 
 namespace py = pybind11;
 
-class Gilc {
+constexpr double square(double value) { return value * value; }
+
+class Timing {
 public:
-  Gilc() : calls_(0) {}
-  double gilc() {
-    ++calls_;
-    if (calls_ % 1000 == 1) {
-      auto now = std::chrono::system_clock::now();
-      std::chrono::duration<double> delta = now - last_time_;
-      last_time_ = std::move(now);
-      if (calls_ > 1) // Not first time.
-        return 1000.0 / delta.count();
-    }
-    return 0.0;
+  void time() {
+    if (count_ == 0) {
+      ++count_;
+      last_time_ = std::chrono::system_clock::now();
+      return;
+    };
+
+    auto now = std::chrono::system_clock::now();
+    std::chrono::duration<double> delta = now - last_time_;
+    last_time_ = std::move(now);
+
+    call(delta.count());
   }
 
+  void call(double value) {
+    int64_t n = count_ - 1;
+
+    /* Online update. See
+       http://www.incompleteideas.net/book/first/ebook/node19.html) and
+       https://math.stackexchange.com/a/103025/5051
+    */
+    double mean = mean_ + (value - mean_) / (count_ + 1);
+    double var =
+        (count_ * var_ + count_ * square(mean_ - mean) + square(value - mean)) /
+        (count_ + 1);
+
+    ++count_;
+    mean_ = mean;
+    var_ = var;
+  }
+
+  int64_t count() { return count_; }
+  double mean() { return mean_; }
+  double var() { return var_; }
+  double std() { return std::sqrt(var_); }
+
 private:
-  int64_t calls_;
+  int64_t count_ = 0;
+  double mean_ = 0.0;
+  double var_ = 0.0;
   std::chrono::time_point<std::chrono::system_clock> last_time_;
 };
 
@@ -29,25 +57,30 @@ struct MyCModule {
 
   struct MyCObject {
     PyObject_HEAD /**/;
-    Gilc *gilc;
-    static PyObject *call(MyCObject *self) {
-      return PyFloat_FromDouble(self->gilc->gilc());
+    Timing *timing;
+    static PyObject *time(MyCObject *self) {
+      self->timing->time();
+      Py_RETURN_NONE;
     }
-    static PyObject *call_nogil(MyCObject *self) {
-      double result;
-      Py_BEGIN_ALLOW_THREADS result = self->gilc->gilc();
-      Py_END_ALLOW_THREADS return PyFloat_FromDouble(result);
+
+    static PyObject *time_nogil(MyCObject *self) {
+      // clang-format off
+      Py_BEGIN_ALLOW_THREADS
+      self->timing->time();
+      Py_END_ALLOW_THREADS
+      Py_RETURN_NONE;
+      // clang-format on
     }
 
     static void tp_dealloc(PyObject *pself) {
       MyCObject *self = (MyCObject *)pself;
-      delete self->gilc;
+      delete self->timing;
       Py_TYPE(self)->tp_free(pself);
     }
     static PyObject *tp_new(PyTypeObject *type, PyObject *args,
                             PyObject *kwds) {
       MyCObject *self = (MyCObject *)type->tp_alloc(type, 0);
-      self->gilc = new Gilc;
+      self->timing = new Timing;
       return (PyObject *)self;
     }
     static int tp_init(PyObject *pself, PyObject *args, PyObject *kwds) {
@@ -60,9 +93,8 @@ struct MyCModule {
       PyModuleDef_HEAD_INIT,
   };
   PyMethodDef myCObjectMethods[5] = {
-      {"call", (PyCFunction)&MyCObject::call, METH_NOARGS, "Doc for call"},
-      {"call_nogil", (PyCFunction)&MyCObject::call_nogil, METH_NOARGS,
-       "Doc for call_nogil"},
+      {"time", (PyCFunction)&MyCObject::time, METH_NOARGS, "Doc for time"},
+      {"time_nogil", (PyCFunction)&MyCObject::time_nogil, METH_NOARGS, ""},
       {nullptr, nullptr, 0, nullptr}};
   PyTypeObject myCObjectType = {PyVarObject_HEAD_INIT(nullptr, 0)};
 
@@ -114,9 +146,15 @@ struct MyCModule {
 };
 
 PYBIND11_MODULE(gilc, m) {
-  py::class_<Gilc>(m, "Gilc")
+  py::class_<Timing>(m, "Timing")
       .def(py::init<>())
-      .def("gilc", &Gilc::gilc)
-      .def("gilc_nogil", &Gilc::gilc, py::call_guard<py::gil_scoped_release>());
+      .def("time", &Timing::time)
+      .def("time_nogil", &Timing::time,
+           py::call_guard<py::gil_scoped_release>())
+      .def("call", &Timing::call)
+      .def("mean", &Timing::mean)
+      .def("var", &Timing::var)
+      .def("std", &Timing::std)
+      .def("count", &Timing::count);
   m.attr("mycmodule") = MyCModule::get().module;
 }
