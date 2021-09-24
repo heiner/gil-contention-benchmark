@@ -51,99 +51,93 @@ private:
   std::chrono::time_point<std::chrono::system_clock> last_time_;
 };
 
-int myCModuleCounter = 0;
-struct MyCModule {
-  std::string name = "mycmodule_" + std::to_string(++myCModuleCounter);
+struct PyTiming {
+  PyObject_HEAD /**/;
+  Timing *timing;
+  static PyObject *time(PyTiming *self) {
+    self->timing->time();
+    Py_RETURN_NONE;
+  }
 
-  struct MyCObject {
-    PyObject_HEAD /**/;
-    Timing *timing;
-    static PyObject *time(MyCObject *self) {
-      self->timing->time();
-      Py_RETURN_NONE;
-    }
-
-    static PyObject *time_nogil(MyCObject *self) {
-      // clang-format off
+  static PyObject *time_nogil(PyTiming *self) {
+    // clang-format off
       Py_BEGIN_ALLOW_THREADS
       self->timing->time();
       Py_END_ALLOW_THREADS
       Py_RETURN_NONE;
-      // clang-format on
-    }
-
-    static void tp_dealloc(PyObject *pself) {
-      MyCObject *self = (MyCObject *)pself;
-      delete self->timing;
-      Py_TYPE(self)->tp_free(pself);
-    }
-    static PyObject *tp_new(PyTypeObject *type, PyObject *args,
-                            PyObject *kwds) {
-      MyCObject *self = (MyCObject *)type->tp_alloc(type, 0);
-      self->timing = new Timing;
-      return (PyObject *)self;
-    }
-    static int tp_init(PyObject *pself, PyObject *args, PyObject *kwds) {
-      MyCObject *self = (MyCObject *)pself;
-      /* Could set members of self. */
-      return 0;
-    }
-  };
-  PyModuleDef moduleDef = {
-      PyModuleDef_HEAD_INIT,
-  };
-  PyMethodDef myCObjectMethods[5] = {
-      {"time", (PyCFunction)&MyCObject::time, METH_NOARGS, "Doc for time"},
-      {"time_nogil", (PyCFunction)&MyCObject::time_nogil, METH_NOARGS, ""},
-      {nullptr, nullptr, 0, nullptr}};
-  PyTypeObject myCObjectType = {PyVarObject_HEAD_INIT(nullptr, 0)};
-
-  py::object module;
-  MyCObject myCObject;
-  ~MyCModule() {
-    // Python has already shut down
-    module.release();
-  }
-  MyCModule() {
-    moduleDef.m_name = name.c_str();
-    moduleDef.m_doc = "Example module";
-    moduleDef.m_size = -1;
-
-    myCObjectType.tp_name = "MyCObject";
-    myCObjectType.tp_basicsize = sizeof(MyCObject);
-    myCObjectType.tp_itemsize = 0;
-    myCObjectType.tp_flags = Py_TPFLAGS_DEFAULT;
-    myCObjectType.tp_methods = myCObjectMethods;
-    myCObjectType.tp_dealloc = MyCObject::tp_dealloc;
-    myCObjectType.tp_init = MyCObject::tp_init;
-    myCObjectType.tp_new = MyCObject::tp_new;
-
-    if (PyType_Ready(&myCObjectType) < 0) {
-      throw std::runtime_error("PyType_Ready failed");
-    }
-    module = py::reinterpret_steal<py::object>(PyModule_Create(&moduleDef));
-    if (!module) {
-      throw std::runtime_error("PyModule_Create failed");
-    }
-    Py_INCREF(&myCObjectType);
-    PyModule_AddObject(module.ptr(), "MyCObject", (PyObject *)&myCObjectType);
-
-    /* Add static object */
-    memset(&myCObject, 0, sizeof(myCObject));
-    PyObject *o = PyObject_Init((PyObject *)&myCObject, &myCObjectType);
-    if (o != (PyObject *)&myCObject) {
-      throw std::runtime_error("PyObject_Init failed");
-    }
-    Py_INCREF(o);
-
-    PyModule_AddObject(module.ptr(), "mycobject", o);
+    // clang-format on
   }
 
-  static MyCModule &get() {
-    static MyCModule o;
-    return o;
+  static PyObject *call(PyTiming *self, PyObject *value) {
+    double v = PyFloat_AsDouble(value);
+    if (PyErr_Occurred())
+      return NULL;
+
+    self->timing->call(v);
+    Py_RETURN_NONE;
+  }
+
+  static PyObject *count(PyTiming *self) {
+    return PyLong_FromLong(self->timing->count());
+  }
+
+  static PyObject *mean(PyTiming *self) {
+    return PyFloat_FromDouble(self->timing->mean());
+  }
+
+  static PyObject *var(PyTiming *self) {
+    return PyFloat_FromDouble(self->timing->var());
+  }
+
+  static PyObject *std(PyTiming *self) {
+    return PyFloat_FromDouble(self->timing->std());
+  }
+
+  static void tp_dealloc(PyObject *pself) {
+    PyTiming *self = (PyTiming *)pself;
+    delete self->timing;
+    Py_TYPE(self)->tp_free(pself);
+  }
+  static PyObject *tp_new(PyTypeObject *type, PyObject *args, PyObject *kwds) {
+    PyTiming *self = (PyTiming *)type->tp_alloc(type, 0);
+    self->timing = new Timing;
+    return (PyObject *)self;
+  }
+  static int tp_init(PyObject *pself, PyObject *args, PyObject *kwds) {
+    PyTiming *self = (PyTiming *)pself;
+    /* Could set members of self. */
+    return 0;
   }
 };
+
+static PyTypeObject PyTimingType = {PyVarObject_HEAD_INIT(nullptr, 0)};
+
+static PyMethodDef PyTimingMethods[] = {
+    {"time", (PyCFunction)&PyTiming::time, METH_NOARGS, "Doc for time"},
+    {"time_nogil", (PyCFunction)&PyTiming::time_nogil, METH_NOARGS, ""},
+    {"call", (PyCFunction)&PyTiming::call, METH_O, ""},
+    {"count", (PyCFunction)&PyTiming::count, METH_NOARGS, ""},
+    {"mean", (PyCFunction)&PyTiming::mean, METH_NOARGS, ""},
+    {"var", (PyCFunction)&PyTiming::var, METH_NOARGS, ""},
+    {"std", (PyCFunction)&PyTiming::std, METH_NOARGS, ""},
+    {nullptr, nullptr, 0, nullptr}};
+
+static PyTypeObject *createPyTimingType() {
+  PyTimingType.tp_name = "PyTiming";
+  PyTimingType.tp_basicsize = sizeof(PyTiming);
+  PyTimingType.tp_itemsize = 0;
+  PyTimingType.tp_flags = Py_TPFLAGS_DEFAULT;
+  PyTimingType.tp_methods = PyTimingMethods;
+  PyTimingType.tp_dealloc = PyTiming::tp_dealloc;
+  PyTimingType.tp_init = PyTiming::tp_init;
+  PyTimingType.tp_new = PyTiming::tp_new;
+
+  if (PyType_Ready(&PyTimingType) < 0) {
+    throw std::runtime_error("PyType_Ready failed");
+  }
+  Py_INCREF(&PyTimingType);
+  return &PyTimingType;
+}
 
 PYBIND11_MODULE(gilc, m) {
   py::class_<Timing>(m, "Timing")
@@ -156,5 +150,6 @@ PYBIND11_MODULE(gilc, m) {
       .def("var", &Timing::var)
       .def("std", &Timing::std)
       .def("count", &Timing::count);
-  m.attr("mycmodule") = MyCModule::get().module;
+
+  PyModule_AddObject(m.ptr(), "CTiming", (PyObject *)createPyTimingType());
 }
