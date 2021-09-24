@@ -9,25 +9,25 @@ constexpr double square(double value) { return value * value; }
 class Timing {
 public:
   void time() {
-    if (count_ == 0) {
-      ++count_;
+    if (++timing_count_ == 1) {
       last_time_ = std::chrono::system_clock::now();
       return;
     };
 
-    auto now = std::chrono::system_clock::now();
-    std::chrono::duration<double> delta = now - last_time_;
-    last_time_ = std::move(now);
-
-    call(delta.count());
+    if (timing_count_ % 1000 == 0) {
+      auto now = std::chrono::system_clock::now();
+      std::chrono::duration<double> delta = now - last_time_;
+      last_time_ = std::move(now);
+      call(1000.0 / delta.count());
+    }
   }
 
   void call(double value) {
-    int64_t n = count_ - 1;
-
-    /* Online update. See
-       http://www.incompleteideas.net/book/first/ebook/node19.html) and
-       https://math.stackexchange.com/a/103025/5051
+    /* Online update.
+       See
+         http://www.incompleteideas.net/book/first/ebook/node19.html
+       and
+         https://math.stackexchange.com/a/103025/5051
     */
     double mean = mean_ + (value - mean_) / (count_ + 1);
     double var =
@@ -48,6 +48,8 @@ private:
   int64_t count_ = 0;
   double mean_ = 0.0;
   double var_ = 0.0;
+
+  int64_t timing_count_ = 0;
   std::chrono::time_point<std::chrono::system_clock> last_time_;
 };
 
