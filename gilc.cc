@@ -1,6 +1,9 @@
 
 #include <cmath>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
+#include <thread>
+#include <tuple>
 
 namespace py = pybind11;
 
@@ -8,17 +11,19 @@ constexpr double square(double value) { return value * value; }
 
 class Timing {
 public:
+  Timing(int64_t call_every = 1000) : call_every_(call_every) {}
+
   void time() {
     if (++timing_count_ == 1) {
       last_time_ = std::chrono::system_clock::now();
       return;
     };
 
-    if (timing_count_ % 1000 == 0) {
+    if (timing_count_ % call_every_ == 0) {
       auto now = std::chrono::system_clock::now();
       std::chrono::duration<double> delta = now - last_time_;
       last_time_ = std::move(now);
-      call(1000.0 / delta.count());
+      call(call_every_ / delta.count());
     }
   }
 
@@ -49,6 +54,7 @@ private:
   double mean_ = 0.0;
   double var_ = 0.0;
 
+  int64_t call_every_;
   int64_t timing_count_ = 0;
   std::chrono::time_point<std::chrono::system_clock> last_time_;
 };
@@ -63,10 +69,10 @@ struct PyTiming {
 
   static PyObject *time_nogil(PyTiming *self) {
     // clang-format off
-      Py_BEGIN_ALLOW_THREADS
-      self->timing->time();
-      Py_END_ALLOW_THREADS
-      Py_RETURN_NONE;
+    Py_BEGIN_ALLOW_THREADS
+    self->timing->time();
+    Py_END_ALLOW_THREADS
+    Py_RETURN_NONE;
     // clang-format on
   }
 
@@ -141,9 +147,42 @@ static PyTypeObject *createPyTimingType() {
   return &PyTimingType;
 }
 
+std::tuple<int64_t, double, double> cpp_loop() {
+  Timing t;
+  for (int i = 0; i < 1000000; ++i) {
+    t.time();
+  }
+  return std::make_tuple(t.count(), t.mean(), t.std());
+}
+
+std::vector<std::shared_ptr<Timing>> cpp_loop_threads(int num_threads = 2) {
+
+  std::vector<std::shared_ptr<Timing>> result{std::make_shared<Timing>(10000),
+                                              std::make_shared<Timing>(10000)};
+
+  std::vector<std::thread> threads;
+
+  for (auto &t : result) {
+    threads.emplace_back([&t] {
+      for (int i = 0; i < 1000000; ++i) {
+        t->time();
+      }
+    });
+  }
+
+  for (std::thread &thread : threads) {
+    thread.join();
+  }
+
+  return result;
+}
+
 PYBIND11_MODULE(gilc, m) {
-  py::class_<Timing>(m, "Timing")
-      .def(py::init<>())
+  m.def("cpp_loop", cpp_loop);
+  m.def("cpp_loop_threads", cpp_loop_threads);
+
+  py::class_<Timing, std::shared_ptr<Timing>>(m, "Timing")
+      .def(py::init<int64_t>(), py::arg("call_every") = 1000)
       .def("time", &Timing::time)
       .def("time_nogil", &Timing::time,
            py::call_guard<py::gil_scoped_release>())
