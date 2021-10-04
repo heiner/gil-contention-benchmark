@@ -1,33 +1,33 @@
+import csv
 import queue
+import sys
 import threading
-import numpy as np
 
 import gilc
 
 
-def loop(upto, call):
+def loop(f):
     try:
-        for _ in range(upto):
-            call()
+        while not f():
+            pass
     except KeyboardInterrupt:
         print("(Stopping.)")
 
 
-def a(create_timing=gilc.Timing, method="time"):
+def a(create_timing=gilc.Timing, method="call"):
     """Case a): single threaded."""
     t = create_timing()
-    loop(int(1e6), call=getattr(t, method))
+    loop(getattr(t, method))
+    return t.num_calls() / t.delta()
 
-    return t.mean() / 1000, t.std() / 1000
 
-
-def b(create_timing=gilc.Timing, method="time_nogil"):
+def b(create_timing=gilc.Timing, method="call_nogil"):
     """Case b): multi threaded, two threads, each doing a)."""
     q = queue.Queue()
 
     def target():
         t = create_timing()
-        loop(int(1e6), call=getattr(t, method))
+        loop(getattr(t, method))
         q.put(t)
 
     threads = []
@@ -42,71 +42,40 @@ def b(create_timing=gilc.Timing, method="time_nogil"):
     while not q.empty():
         timings.append(q.get())
 
-    count, mean, var = sum_timings(*timings)
-    return mean / 1000, np.sqrt(var) / 1000
-
-
-def pool(t0, t1):
-    """Pool two timing objects."""
-    # Cf.
-    # https://en.wikipedia.org/wiki/Pooled_variance#Aggregation_of_standard_deviation_data
-    ts = (t0, t1)
-    count = sum(t.count() for t in ts)
-    mean = sum(t.count() * t.mean() for t in ts) / count
-    var = (
-        sum(t.count() * t.var() for t in ts) / count
-        + t0.count() * t1.count() / count ** 2 * (t0.mean() - t1.mean()) ** 2
-    )
-    return count, mean, var
-
-
-def sum_timings(*timings):
-    return (
-        sum(t.count() for t in timings),
-        sum(t.mean() for t in timings),
-        sum(t.var() for t in timings),
-    )
+    return sum(t.num_calls() / t.delta() for t in timings)
 
 
 def main():
-    print(
-        "\t".join(5 * ["%s"])
-        % (
-            "method",
-            "single thread",
-            "single thread std",
-            "two threads",
-            "two threads std",
-        )
-    )
+    writer = csv.writer(sys.stdout, delimiter="\t")
+    writer.writerow(("method", "single thread", "two threads"))
 
-    def label(s):
-        if s.endswith("_nogil"):
-            return "GIL dropped"
-        return "GIL held"
+    def s(f):
+        return "%.1f" % (f / 1000)
 
-    template = "\t".join(["%s"] + 4 * ["%.0f"])
+    def label(timing, method):
+        if timing == gilc.Timing:
+            result = "pybind w/ %s"
+        elif timing == gilc.CTiming:
+            result = "C API w/ %s"
 
-    for method in ("time", "time_nogil"):
-        a_mean, a_std = a(gilc.Timing, method)
-        b_mean, b_std = b(gilc.Timing, method)
-        print(template % ("pybind w/ %s" % label(method), a_mean, a_std, b_mean, b_std))
+        if method.endswith("_nogil"):
+            return result % "GIL dropped"
+        return result % "GIL held"
 
-    for method in ("time", "time_nogil"):
-        a_mean, a_std = a(gilc.CTiming, method)
-        b_mean, b_std = b(gilc.CTiming, method)
-        print(template % ("C API w/ %s" % label(method), a_mean, a_std, b_mean, b_std))
+    for Timing in (gilc.Timing, gilc.CTiming):
+        for method in ("call", "call_nogil"):
+            writer.writerow(
+                (
+                    label(Timing, method),
+                    s(a(Timing, method)),
+                    s(b(Timing, method)),
+                )
+            )
 
-    _, a_mean, a_std = gilc.cpp_loop()
-    timings = gilc.cpp_loop_threads(2)
-
-    _, b_mean, b_var = sum_timings(*timings)
-    b_std = np.sqrt(b_var)
-
-    print(
-        template
-        % ("C++ loop", a_mean / 1000, a_std / 1000, b_mean / 1000, b_std / 1000)
-    )
+    if "c++" in sys.argv[1:]:
+        cpp_a = gilc.cpp_loop()
+        cpp_bs = gilc.cpp_loop_threads(2)
+        writer.writerow(("C++ loop", s(cpp_a), s(sum(cpp_bs))))
 
 
 if __name__ == "__main__":
