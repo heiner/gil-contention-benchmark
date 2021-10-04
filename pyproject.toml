@@ -1,0 +1,5 @@
+[tool.black]
+line-length = 88
+[tool.isort]
+force_single_line = true
+profile = "black"
