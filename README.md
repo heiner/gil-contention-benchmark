@@ -20,13 +20,13 @@ Results on MacBook (in 1000 calls/sec):
 
 ```
 method	single thread	two threads
-pybind w/ GIL held	4261.2	3978.7
-pybind w/ GIL dropped	3252.8	555.7
-C API w/ GIL held	64272.7	75916.3
-C API w/ GIL dropped	13102.4	4029.2
+pybind w/ GIL held	5769.2	5542.3
+pybind w/ GIL dropped	4360.5	1614.7
+C API w/ GIL held	77954.0	76413.6
+C API w/ GIL dropped	15467.2	5259.7
 C++ loop	3584229.4	7043703.5
 ```
 
 ![Plot](plot.svg)
 
-(C++ results not shown as they require a log plot.)
+(C++ results not shown as they require a [log plot](plot-log.svg).)

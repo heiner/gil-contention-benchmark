@@ -1,5 +1,5 @@
 method	single thread	two threads
-pybind w/ GIL held	3958.9	4123.5
-pybind w/ GIL dropped	3146.2	580.7
-C API w/ GIL held	66034.5	76477.3
-C API w/ GIL dropped	13430.6	4555.0
+pybind w/ GIL held	5769.2	5542.3
+pybind w/ GIL dropped	4360.5	1614.7
+C API w/ GIL held	77954.0	76413.6
+C API w/ GIL dropped	15467.2	5259.7
